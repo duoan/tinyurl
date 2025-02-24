@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.4.3'
     id 'io.spring.dependency-management' version '1.1.7'
+    id "me.champeau.jmh" version "0.7.3"
 }
 
 group = 'duoan.github.com'
@@ -43,6 +44,16 @@ dependencies {
     implementation 'org.hibernate:hibernate-validator:6.2.0.Final'  // Ensure correct version
     implementation 'org.glassfish:javax.el:3.0.0'  // Optional for Java 8+ Date/Time validation
 
+    implementation 'org.apache.commons:commons-lang3:3.17.0'
+
+
+    // JMH dependencies for benchmarking
+    testImplementation 'org.openjdk.jmh:jmh-core:1.37'
+    testAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+    jmh 'org.openjdk.jmh:jmh-core:1.37'
+    jmh 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+    jmh 'org.openjdk.jmh:jmh-generator-bytecode:1.37'
+
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
     runtimeOnly 'org.postgresql:postgresql'
@@ -50,6 +61,12 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+
+//tasks.register('jmhJar', JavaExec) {
+//    classpath = sourceSets.main.runtimeClasspath
+//    mainClass = 'org.openjdk.jmh.Main'
+//    args = ['-i', '10', '-f', '1', '-t', '1']
+//}
 
 tasks.named('test') {
     useJUnitPlatform()

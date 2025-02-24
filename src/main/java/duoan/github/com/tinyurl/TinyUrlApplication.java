@@ -10,6 +10,7 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.cache.support.CompositeCacheManager;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -36,24 +37,33 @@ public class TinyUrlApplication {
         return Redisson.create();
     }
 
-    @Bean
-    CacheManager cacheManager(RedisConnectionFactory redisConnectionFactory) {
+    @Bean("l2CacheManager")
+    RedisCacheManager l2CacheManager(RedisConnectionFactory redisConnectionFactory) {
+        return RedisCacheManager.builder(redisConnectionFactory)
+                // Expiration time for Redis cache
+                .cacheDefaults(RedisCacheConfiguration.defaultCacheConfig().entryTtl(Duration.ofDays(7)))
+                .build();
+    }
+
+    @Bean("l1CacheManager")
+    CaffeineCacheManager l1CacheManager() {
         // Local Cache with Caffeine
         CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager();
         caffeineCacheManager.setCaffeine(Caffeine.newBuilder()
                 .maximumSize(10_000)
                 .expireAfterWrite(Duration.ofMinutes(60)));
         caffeineCacheManager.setAllowNullValues(false);
+        return caffeineCacheManager;
+    }
 
-        // Distributed Cache with Redis
-        RedisCacheManager redisCacheManager = RedisCacheManager.builder(redisConnectionFactory)
-                // Expiration time for Redis cache
-                .cacheDefaults(RedisCacheConfiguration.defaultCacheConfig().entryTtl(Duration.ofDays(7)))
-                .build();
-
-        CompositeCacheManager compositeCacheManager = new CompositeCacheManager(caffeineCacheManager, redisCacheManager);
+    @Primary
+    @Bean("tieredCacheManager")
+    CompositeCacheManager tieredCacheManager(
+            CaffeineCacheManager caffeineCacheManager,
+            RedisCacheManager redisCacheManager) {
+        CompositeCacheManager compositeCacheManager =
+                new CompositeCacheManager(caffeineCacheManager, redisCacheManager);
         compositeCacheManager.setFallbackToNoOpCache(true);
-
         return compositeCacheManager;
     }
 }

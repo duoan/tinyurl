@@ -1,35 +1,44 @@
 package duoan.github.com.tinyurl;
 
-import org.springframework.cache.CacheManager;
+import lombok.extern.log4j.Log4j2;
+import org.springframework.cache.support.CompositeCacheManager;
+import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
+@Log4j2
 @Service
 class TinyUrlCache {
-    private static final String SHORT_URL_TO_LONG_URL = "SHORT_URL_TO_LONG_URL";
-    private static final String LONG_URL_TO_SHORT_URL = "LONG_URL_TO_SHORT_URL";
+    private static final String SHORT_URL_TO_LONG_URL = "S2L";
+    private static final String LONG_URL_TO_SHORT_URL = "L2S";
 
-    private final CacheManager cacheManager;
+    private final CompositeCacheManager tieredCacheManager;
+    private final RedisCacheManager remoteCacheManager;
+    private final UrlMappingRepository urlMappingRepository;
 
-    TinyUrlCache(CacheManager cacheManager) {
-        this.cacheManager = cacheManager;
-    }
-
-    Optional<String> getLongUrl(String shortUrl) {
-        return Optional.ofNullable(cacheManager.getCache(SHORT_URL_TO_LONG_URL))
-                .flatMap(cache -> Optional.ofNullable(cache.get(shortUrl, String.class)));
+    TinyUrlCache(CompositeCacheManager tieredCacheManager,
+                 RedisCacheManager remoteCacheManager,
+                 UrlMappingRepository urlMappingRepository) {
+        this.tieredCacheManager = tieredCacheManager;
+        this.remoteCacheManager = remoteCacheManager;
+        this.urlMappingRepository = urlMappingRepository;
     }
 
     Optional<String> getShortUrl(String longUrl) {
-        return Optional.ofNullable(cacheManager.getCache(LONG_URL_TO_SHORT_URL))
+        return Optional.ofNullable(tieredCacheManager.getCache(LONG_URL_TO_SHORT_URL))
                 .flatMap(cache -> Optional.ofNullable(cache.get(longUrl, String.class)));
     }
 
-    void addTinyUrl(String shortUrl, String longUrl) {
-        Optional.ofNullable(cacheManager.getCache(SHORT_URL_TO_LONG_URL))
+    Optional<String> getLongUrl(String shortUrl) {
+        return Optional.ofNullable(tieredCacheManager.getCache(SHORT_URL_TO_LONG_URL))
+                .flatMap(cache -> Optional.ofNullable(cache.get(shortUrl, String.class)));
+    }
+
+    void dualPutUrlMapping(String shortUrl, String longUrl) {
+        Optional.ofNullable(tieredCacheManager.getCache(SHORT_URL_TO_LONG_URL))
                 .ifPresent(x -> x.put(shortUrl, longUrl));
-        Optional.ofNullable(cacheManager.getCache(LONG_URL_TO_SHORT_URL))
+        Optional.ofNullable(tieredCacheManager.getCache(LONG_URL_TO_SHORT_URL))
                 .ifPresent(x -> x.put(longUrl, shortUrl));
     }
 
