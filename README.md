@@ -2,6 +2,11 @@
 
 This is a simple TinyURL service that allows users to generate short URLs from long URLs. The service is implemented using **Spring Boot**, **Redis**, **PostgreSQL**, and **RedisBloom** to efficiently reduce the number of writes to the database.
 
+## Architecture
+
+### High Level
+![](./images/high-level.png)
+
 ## Features
 
 - **Short URL generation**: Convert long URLs to short URLs.
@@ -76,12 +81,7 @@ bootBuildImage {
 ##### 2. Deploy the application
 
 ```bash
-# deploy postgres
- kubectl apply -f ./kubernetes/tinyurl-postgres-deployment.yaml
-# deploy redis
- kubectl apply -f ./kubernetes/tinyurl-redis-deployment.yaml
-# deploy app
- kubectl apply -f ./kubernetes/tinyurl-app-deployment.yaml
+./k8s.sh deploy
 ```
 
 For production, please change app type to `LoadBalancer` in file ``./kubernetes/tinyurl-app-deployment.yaml` 
