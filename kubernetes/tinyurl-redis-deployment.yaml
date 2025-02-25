@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tinyurl-redis
-  namespace: tinyurl
+  
   labels:
     app: tinyurl-redis
 spec:
@@ -31,7 +31,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: tinyurl-redis-service
-  namespace: tinyurl
+  
 spec:
   selector:
     app: tinyurl-redis
@@ -45,7 +45,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-tinyurl-redis-access
-  namespace: tinyurl
+  
 spec:
   podSelector:
     matchLabels:

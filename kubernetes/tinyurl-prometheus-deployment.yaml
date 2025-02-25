@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: tinyurl-prometheus-config
-  namespace: tinyurl
+  
 data:
   prometheus.yml: |
     global:
@@ -20,7 +20,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tinyurl-prometheus
-  namespace: tinyurl
+  
   labels:
     app: prometheus
 spec:
@@ -53,7 +53,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: tinyurl-prometheus-service
-  namespace: tinyurl
+  
 spec:
   type: NodePort
   ports:
