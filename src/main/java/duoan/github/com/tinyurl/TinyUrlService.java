@@ -1,5 +1,6 @@
 package duoan.github.com.tinyurl;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
@@ -7,7 +8,9 @@ import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Log4j2
 @Service
@@ -15,10 +18,14 @@ class TinyUrlService {
     /// After {@linkplain #COLLISON_LIMIT} tries of re-salting long urls to avoid collisions, give up.
     private static final int COLLISON_LIMIT = 100;
     private static final String NULL_LONG_URL = "NULL";
+    private static final String METRIC_PREFIX = "tinyurl.service";
 
     private final UrlMappingRepository repository;
     private final TinyUrlCache cache;
     private final MeterRegistry meterRegistry;
+
+    // ThreadLocal for counters
+    private final Map<String, Counter> counters = new ConcurrentHashMap<>();
 
     TinyUrlService(UrlMappingRepository repository, TinyUrlCache cache, MeterRegistry meterRegistry) {
         this.repository = repository;
@@ -27,35 +34,27 @@ class TinyUrlService {
     }
 
     String getLongUrl(String shortUrl) {
-        // 1. verify the shortUrl
-        if (shortUrl.length() > Constants.MAX_SHORT_URL_LENGTH) {
-            meterRegistry.gauge("tiny_url.gauge.service.get.invalid_short_url", 1);
-            throw new TinyUrlNotFoundException(shortUrl);
-        }
-
-        // 2. check cache
         Optional<String> cachedLongUrl = cache.getLongUrl(shortUrl);
-
         if (cachedLongUrl.isPresent()) {
-            meterRegistry.gauge("tiny_url.gauge.service.get.long_url_cache_hit", 1);
+            count("get.cache.hits");
             // no data
             if (cachedLongUrl.get().equals(NULL_LONG_URL)) {
-                meterRegistry.gauge("tiny_url.gauge.service.get.long_url_cache_null", 1);
+                count("get.not_found");
                 throw new TinyUrlNotFoundException(shortUrl);
             }
 
             return cachedLongUrl.get();
         }
-
+        count("get.cache.misses");
         Optional<UrlMapping> optionalTinyUrlEntity = repository.findByShortUrl(shortUrl);
         if (optionalTinyUrlEntity.isPresent()) {
-            meterRegistry.gauge("tiny_url.gauge.service.get.long_url_db_hit", 1);
+            count("get.db.hits");
             UrlMapping urlMapping = optionalTinyUrlEntity.get();
             cache.dualPutUrlMapping(urlMapping.getShortUrl(), urlMapping.getLongUrl());
             return urlMapping.getLongUrl();
         }
         // cache no data
-        meterRegistry.gauge("tiny_url.gauge.service.get.long_url_not_exist", 1);
+        count("get.not_found");
         cache.dualPutUrlMapping(shortUrl, NULL_LONG_URL);
         throw new TinyUrlNotFoundException(shortUrl);
     }
@@ -70,13 +69,13 @@ class TinyUrlService {
         // directly return existing short url if exist long url
         Optional<String> optionalCachedShortUrl = cache.getShortUrl(longUrl);
         if (optionalCachedShortUrl.isPresent() && !optionalCachedShortUrl.get().equals("empty")) {
-            meterRegistry.gauge("tiny_url.gauge.service.create.short_url_cache_hit", 1);
+            count("create.cache.hits");
             return optionalCachedShortUrl.get();
         }
 
         Optional<UrlMapping> optionalTinyUrlEntity = repository.findByLongUrl(longUrl);
         if (optionalTinyUrlEntity.isPresent()) {
-            meterRegistry.gauge("tiny_url.gauge.service.create.short_url_db_hit", 1);
+            count("create.db.hits");
             UrlMapping urlMapping = optionalTinyUrlEntity.get();
             cache.dualPutUrlMapping(urlMapping.getShortUrl(), urlMapping.getLongUrl());
             return urlMapping.getShortUrl();
@@ -89,7 +88,7 @@ class TinyUrlService {
         cache.dualPutUrlMapping(shortUrl, longUrl);
         // TODO publish to Kafka for downstream notification
 
-        meterRegistry.gauge("tiny_url.gauge.service.create.short_url_generated", 1);
+        count("create.generated");
 
         return shortUrl;
     }
@@ -100,6 +99,7 @@ class TinyUrlService {
         do {
             if (attempt > 0) {
                 log.warn("Collison for Url:{}, salt:{}, last shortUrl : {}", longUrl, attempt, shortUrl);
+                count("create.collisions");
             }
             shortUrl = UrlHashUtil.hashUrl(longUrl, attempt);
             // Check cache first
@@ -109,13 +109,15 @@ class TinyUrlService {
                     return shortUrl;
                 }
             }
-            meterRegistry.gauge("tiny_url.gauge.service.create.short_url_collison", 0);
-
             attempt++;
         } while (attempt < COLLISON_LIMIT);
-        meterRegistry.gauge("tiny_url.gauge.service.create.short_url_failed", 1);
+        count("create.failures");
         // If we've exceeded the max retries, return null or handle error
         throw new RuntimeException("Unable to generate unique short URL after " + COLLISON_LIMIT + " attempts.");
+    }
+
+    private void count(String name) {
+        counters.computeIfAbsent(name, n -> meterRegistry.counter(METRIC_PREFIX + "." + n)).increment();
     }
 
 

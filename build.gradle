@@ -14,7 +14,7 @@ java {
     }
 }
 
- String jmhThreads = findProperty("jmh.threads")
+String jmhThreads = hasProperty("jmh.threads") ? findProperty("jmh.threads") : "1"
 jmh {
     benchmarkMode = ['thrpt']
     warmupIterations = 1

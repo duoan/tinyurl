@@ -16,13 +16,21 @@ This is a simple TinyURL service that allows users to generate short URLs from l
 
 ### Benchmark
 
-
-
 Run the following command line to test.
 ```bash
-./gradlew jmh
+./gradlew jmh -Pjmh.threads=10
 ```
 
+![](./images/metrics.png)
+
+```text
+Benchmark                                     Mode  Cnt  Score   Error   Units
+TinyUrlBenchmarkTest.benchmarkCreateTinyUrl  thrpt   25  1.656 ± 0.046  ops/ms
+TinyUrlBenchmarkTest.benchmarkRedirection    thrpt   20  0.721 ± 0.151  ops/ms
+
+```
+
+> on my local Mac test on docker-compose.
 
 ## Prerequisites
 
