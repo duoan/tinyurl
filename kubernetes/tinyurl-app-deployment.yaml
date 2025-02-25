@@ -18,7 +18,7 @@ spec:
       containers:
         - name: tinyurl-app
           image: docker.io/victorduoan/tinyurl:0.0.1-SNAPSHOT
-          imagePullPolicy: Always
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
               protocol: TCP
