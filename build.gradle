@@ -14,11 +14,10 @@ java {
     }
 }
 
-String jmhThreads = hasProperty("jmh.threads") ? findProperty("jmh.threads") : "1"
 jmh {
     benchmarkMode = ['thrpt']
     warmupIterations = 1
-    threads = Integer.parseInt(jmhThreads)
+    threads = Integer.parseInt(project.properties.get("threads", "1"))
 }
 
 bootBuildImage {
