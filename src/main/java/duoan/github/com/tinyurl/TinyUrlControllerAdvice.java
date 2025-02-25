@@ -19,14 +19,14 @@ class TinyUrlControllerAdvice {
     @ExceptionHandler(ConstraintViolationException.class)
     RedirectView handleValidationException(ConstraintViolationException ex, RedirectAttributes redirectAttributes) {
         redirectAttributes.addFlashAttribute("message", "Validation failed: " + ex.getMessage());
-        meterRegistry.gauge("tinyurl.gauge.controller.validationErrors", ex.getConstraintViolations().size());
+        meterRegistry.counter("tinyurl.controller.get.validationErrors").increment(ex.getConstraintViolations().size());
         return new RedirectView("/");
     }
 
     @ExceptionHandler(TinyUrlNotFoundException.class)
     RedirectView handleTinyUrlNotFoundException(TinyUrlNotFoundException ex, RedirectAttributes redirectAttributes) {
         redirectAttributes.addFlashAttribute("message", ex.getMessage());
-        meterRegistry.gauge("tinyurl.gauge.controller.not_found", 1);
+        meterRegistry.counter("tinyurl.controller.get.not_found").increment();
         return new RedirectView("/");
     }
 }

@@ -16,8 +16,8 @@ import java.nio.charset.StandardCharsets;
 
 @Controller
 @Validated
-@Observed(name = "tiny_url.observed.controller")
-@Timed(value = "tiny_url.timed.controller",
+@Observed(name = "tinyurl.observed.controller")
+@Timed(value = "tinyurl.timed.controller",
         percentiles = {0.5, 0.95, 0.99},
         description = "Time taken for controller")
 class TinyUrlController {

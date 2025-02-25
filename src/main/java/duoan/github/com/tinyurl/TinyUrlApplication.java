@@ -8,6 +8,7 @@ import org.redisson.config.Config;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.cache.support.CompositeCacheManager;
@@ -25,6 +26,7 @@ import java.time.Duration;
 @SpringBootApplication
 @EnableCaching
 @EnableAspectJAutoProxy
+@EnableConfigurationProperties
 public class TinyUrlApplication {
 
     public static void main(String[] args) {

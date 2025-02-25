@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -33,6 +34,7 @@ class TinyUrlService {
         this.meterRegistry = meterRegistry;
     }
 
+    @Transactional(readOnly = true)
     String getLongUrl(String shortUrl) {
         Optional<String> cachedLongUrl = cache.getLongUrl(shortUrl);
         if (cachedLongUrl.isPresent()) {
@@ -59,6 +61,7 @@ class TinyUrlService {
         throw new TinyUrlNotFoundException(shortUrl);
     }
 
+    @Transactional
     @SneakyThrows
     String createShortUrl(String longUrl) {
         if (longUrl.startsWith("https://")) {

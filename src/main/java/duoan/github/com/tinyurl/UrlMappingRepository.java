@@ -9,8 +9,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.sql.Timestamp;
 import java.util.Optional;
 
-@Observed(name = "tiny_url.observed.repository")
-@Timed(value = "tiny_url.timed.repository",
+@Observed(name = "tinyurl.observed.repository")
+@Timed(value = "tinyurl.timed.repository",
         percentiles = {0.5, 0.95, 0.99},
         description = "Time taken for repository")
 interface UrlMappingRepository extends JpaRepository<UrlMapping, Long> {

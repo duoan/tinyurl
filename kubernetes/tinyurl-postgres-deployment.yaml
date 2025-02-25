@@ -1,8 +1,8 @@
+# Primary PVC
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: tinyurl-postgres-pvc
-  
+  name: postgres-primary-pvc
 spec:
   accessModes:
     - ReadWriteOnce
@@ -10,31 +10,109 @@ spec:
     requests:
       storage: 1Gi
 ---
+# Replica PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-replica-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# ConfigMap for postgres configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+data:
+  primary.conf: |
+    listen_addresses = '*'
+    max_connections = 100
+    wal_level = replica
+    max_wal_senders = 10
+    max_replication_slots = 10
+  replica.conf: |
+    hot_standby = on
+    primary_conninfo = 'host=postgres-primary-service port=5432 user=replicator password=replpass'
+---
+# Primary Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tinyurl-postgres
-  
+  name: postgres-primary
   labels:
-    app: tinyurl-postgres
+    app: postgres
+    role: primary
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: tinyurl-postgres
+      app: postgres
+      role: primary
   template:
     metadata:
-      name: tinyurl-postgres
       labels:
-        app: tinyurl-postgres
+        app: postgres
+        role: primary
     spec:
       containers:
-        - name: tinyurl-postgres
+        - name: postgres
           image: postgres:latest
-          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5432
-              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: "mydatabase"
+            - name: POSTGRES_USER
+              value: "myuser"
+            - name: POSTGRES_PASSWORD
+              value: "secret"
+            - name: POSTGRES_REPLICATION_USER
+              value: "replicator"
+            - name: POSTGRES_REPLICATION_PASSWORD
+              value: "replpass"
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: primary.conf
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-primary-pvc
+        - name: postgres-config
+          configMap:
+            name: postgres-config
+---
+# Replica Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-replica
+  labels:
+    app: postgres
+    role: replica
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: postgres
+      role: replica
+  template:
+    metadata:
+      labels:
+        app: postgres
+        role: replica
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:latest
+          ports:
+            - containerPort: 5432
           env:
             - name: POSTGRES_DB
               value: "mydatabase"
@@ -43,23 +121,42 @@ spec:
             - name: POSTGRES_PASSWORD
               value: "secret"
           volumeMounts:
-            - mountPath: /var/lib/postgresql/data
-              name: tinyurl-postgres-storage
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: replica.conf
       volumes:
-        - name: tinyurl-postgres-storage
+        - name: postgres-storage
           persistentVolumeClaim:
-            claimName: tinyurl-postgres-pvc
-      restartPolicy: Always
-
+            claimName: postgres-replica-pvc
+        - name: postgres-config
+          configMap:
+            name: postgres-config
 ---
+# Primary Service
 apiVersion: v1
 kind: Service
 metadata:
-  name: tinyurl-postgres-service
-  
+  name: postgres-primary-service
 spec:
   selector:
-    app: tinyurl-postgres
+    app: postgres
+    role: primary
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+# Replica Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-replica-service
+spec:
+  selector:
+    app: postgres
+    role: replica
   ports:
     - protocol: TCP
       port: 5432

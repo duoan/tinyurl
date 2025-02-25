@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,15 +11,18 @@
     <h2>Create a Tiny URL</h2>
 
     <!-- Display the success or error message if any -->
-    <div id="message" class="alert alert-warning" th:if="${message != null}" role="alert">
-        <span th:text="${message}"></span>
+    <div id="message" class="alert alert-warning"
+         th:class="${message != null} ? 'alert alert-warning' : 'alert alert-warning d-none'"
+         role="alert">
+        <span id="message-text" th:text="${message}"></span>
     </div>
 
     <!-- Tiny URL creation form -->
     <form id="tinyUrlForm">
         <div class="mb-3">
             <label for="longUrl" class="form-label">Enter Long URL:</label>
-            <input type="url" id="longUrl" name="longUrl" class="form-control" placeholder="Enter your long URL" required />
+            <input type="url" id="longUrl" name="longUrl" class="form-control" placeholder="Enter your long URL"
+                   required/>
         </div>
         <button type="submit" class="btn btn-primary">Create Short URL</button>
     </form>
@@ -36,7 +39,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
 <script>
     // Handle the form submission
-    document.getElementById('tinyUrlForm').addEventListener('submit', function(event) {
+    document.getElementById('tinyUrlForm').addEventListener('submit', function (event) {
         event.preventDefault();  // Prevent default form submission
 
         const longUrl = document.getElementById('longUrl').value;
