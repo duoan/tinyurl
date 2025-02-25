@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tinyurl-redis
+  namespace: tinyurl
+  labels:
+    app: tinyurl-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tinyurl-redis
+  template:
+    metadata:
+      name: tinyurl-redis
+      labels:
+        app: tinyurl-redis
+    spec:
+      containers:
+        - name: tinyurl-redis
+          image: redis:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
+              protocol: TCP
+          command: ["redis-server", "--appendonly", "yes"]
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tinyurl-redis-service
+  namespace: tinyurl
+spec:
+  selector:
+    app: tinyurl-redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tinyurl-redis-access
+  namespace: tinyurl
+spec:
+  podSelector:
+    matchLabels:
+      app: tinyurl-redis
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: tinyurl-app
+      ports:
+        - protocol: TCP
+          port: 6379

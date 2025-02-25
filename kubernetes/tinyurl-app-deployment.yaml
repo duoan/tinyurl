@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tinyurl-app
+  namespace: tinyurl
+  labels:
+    app: tinyurl-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tinyurl-app
+  template:
+    metadata:
+      name: tinyurl-app
+      labels:
+        app: tinyurl-app
+    spec:
+      containers:
+        - name: tinyurl-app
+          image: docker.io/victorduoan/tinyurl:0.0.1-SNAPSHOT
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://tinyurl-postgres-service:5432/mydatabase"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "myuser"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "secret"
+            - name: SPRING_REDIS_HOST
+              value: "tinyurl-redis-service"
+            - name: SPRING_REDIS_PORT
+              value: "6379"
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tinyurl-app-service
+  namespace: tinyurl
+spec:
+  # type: LoadBalancer # for production
+  type: NodePort # for local test
+  selector:
+    app: tinyurl-app
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080  # Optional: specify a fixed node port between 30000-32767

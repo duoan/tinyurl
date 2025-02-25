@@ -14,6 +14,17 @@ java {
     }
 }
 
+ String jmhThreads = findProperty("jmh.threads")
+jmh {
+    benchmarkMode = ['thrpt']
+    warmupIterations = 1
+    threads = Integer.parseInt(jmhThreads)
+}
+
+bootBuildImage {
+    imageName = "victorduoan/tinyurl:${version}"
+}
+
 configurations {
     compileOnly {
         extendsFrom annotationProcessor
@@ -31,6 +42,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-rest'
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
     implementation 'com.google.guava:guava:33.4.0-jre'
     implementation 'net.openhft:zero-allocation-hashing:0.16'
     implementation 'com.github.ben-manes.caffeine:caffeine:3.2.0'
@@ -49,6 +61,7 @@ dependencies {
 
     // JMH dependencies for benchmarking
     testImplementation 'org.openjdk.jmh:jmh-core:1.37'
+    testImplementation 'org.apache.httpcomponents:httpclient:4.5.14'
     testAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
     jmh 'org.openjdk.jmh:jmh-core:1.37'
     jmh 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
@@ -57,7 +70,9 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
     runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
     annotationProcessor 'org.projectlombok:lombok'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

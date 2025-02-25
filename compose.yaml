@@ -1,15 +1,29 @@
 services:
+
   postgres:
+    container_name: 'tiny-url-compose-postgres'
     image: 'postgres:latest'
     environment:
       - 'POSTGRES_DB=mydatabase'
-      - 'POSTGRES_PASSWORD=secret'
       - 'POSTGRES_USER=myuser'
+      - 'POSTGRES_PASSWORD=secret'
     ports:
-      - '5432'
+      - '5432:5432'
+
   redis:
+    container_name: 'tiny-url-compose-redis'
     # https://github.com/redis-stack
     # RedisJSON, RediSearch, RedisTimeSeries, and RedisBloom
     image: 'redis/redis-stack-server:latest'
     ports:
-      - '6379'
+      - '6379:6379'
+
+  prometheus:
+    container_name: 'tiny-url-compose-prometheus'
+    image: 'prom/prometheus:latest'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - '9090:9090'

@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tinyurl-postgres-pvc
+  namespace: tinyurl
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tinyurl-postgres
+  namespace: tinyurl
+  labels:
+    app: tinyurl-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tinyurl-postgres
+  template:
+    metadata:
+      name: tinyurl-postgres
+      labels:
+        app: tinyurl-postgres
+    spec:
+      containers:
+        - name: tinyurl-postgres
+          image: postgres:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: "mydatabase"
+            - name: POSTGRES_USER
+              value: "myuser"
+            - name: POSTGRES_PASSWORD
+              value: "secret"
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: tinyurl-postgres-storage
+      volumes:
+        - name: tinyurl-postgres-storage
+          persistentVolumeClaim:
+            claimName: tinyurl-postgres-pvc
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tinyurl-postgres-service
+  namespace: tinyurl
+spec:
+  selector:
+    app: tinyurl-postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432

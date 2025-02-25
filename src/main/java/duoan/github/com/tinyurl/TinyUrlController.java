@@ -1,10 +1,11 @@
 package duoan.github.com.tinyurl;
 
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.observation.annotation.Observed;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
@@ -15,6 +16,10 @@ import java.nio.charset.StandardCharsets;
 
 @Controller
 @Validated
+@Observed(name = "tiny_url.observed.controller")
+@Timed(value = "tiny_url.timed.controller",
+        percentiles = {0.5, 0.95, 0.99},
+        description = "Time taken for controller")
 class TinyUrlController {
     private final TinyUrlService tinyUrlService;
 
@@ -22,9 +27,9 @@ class TinyUrlController {
         this.tinyUrlService = tinyUrlService;
     }
 
-    @GetMapping("/")
-    public String index(Model model) {
-        model.addAttribute("message", "hello");
+
+    @GetMapping({"/"})
+    public String index() {
         return "index";
     }
 
@@ -39,7 +44,6 @@ class TinyUrlController {
     }
 
     @GetMapping("/{shortUrl}")
-    @ResponseBody
     public RedirectView getLongURL(
             @PathVariable
             @Pattern(regexp = "^[a-zA-Z0-9_-]{1,9}$", message = "Invalid short URL format")

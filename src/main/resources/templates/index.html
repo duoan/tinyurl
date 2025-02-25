@@ -11,8 +11,8 @@
     <h2>Create a Tiny URL</h2>
 
     <!-- Display the success or error message if any -->
-    <div id="message" class="alert alert-info" style="display:none;" role="alert">
-        <span id="message-text"></span>
+    <div id="message" class="alert alert-warning" th:if="${message != null}" role="alert">
+        <span th:text="${message}"></span>
     </div>
 
     <!-- Tiny URL creation form -->
