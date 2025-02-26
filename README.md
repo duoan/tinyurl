@@ -8,8 +8,38 @@ This is a simple TinyURL service that allows users to generate short URLs from l
 ![](./images/high-level.png)
 
 
-### Deployment
+### Deployment (Kubernetes)
 ![](./kubernetes/architecture.png)
+
+#### Kubernetes Architecture Summary
+
+
+| Component                  | Type           | Function/Role                                         | Features & Configuration                                      | Interactions |
+|----------------------------|---------------|------------------------------------------------------|----------------------------------------------------------------|--------------|
+| **tinyurl-app** (Deployment) | Application   | Runs the Spring Boot application                     | - **3 replicas** (auto-scaled) <br> - Exposes port **8080** <br> - Readiness & liveness probes <br> - Connects to **PostgreSQL & Redis** | Interacts with **PostgreSQL, Redis, Prometheus** |
+| **tinyurl-app-service** (Service) | Network      | Exposes the app externally via **NodePort**          | - **Port 8080 → NodePort 30080** <br> - Allows access to tinyurl-app | External traffic → **tinyurl-app** |
+| **tinyurl-app-hpa** (HPA)  | Scaling       | Automatically scales the app based on CPU & memory  | - **Min 2, Max 10 replicas** <br> - Scales if **CPU/memory > 80%** | Controls **tinyurl-app** replicas |
+| **postgres-primary** (Deployment) | Database      | Primary PostgreSQL database instance                 | - **1 replica** <br> - Uses a **PersistentVolumeClaim** (1Gi) <br> - Exposes port **5432** <br> - Configured via **ConfigMap** | Primary DB for **tinyurl-app** |
+| **postgres-replica** (Deployment) | Database      | Read-only replica of PostgreSQL                      | - **2 replicas** <br> - Uses a **PersistentVolumeClaim** (1Gi) <br> - Reads from primary via **replication slots** | Read-optimized DB for **tinyurl-app** |
+| **postgres-primary-service** (Service) | Network      | Allows app to connect to the **primary DB**         | - Exposes PostgreSQL **5432** <br> - Used for primary DB connections | Connects **tinyurl-app** → **Primary DB** |
+| **postgres-replica-service** (Service) | Network      | Allows app to connect to the **replica DB**         | - Exposes PostgreSQL **5432** <br> - Used for read operations | Connects **tinyurl-app** → **Replica DB** |
+| **tinyurl-redis** (StatefulSet) | Cache        | Redis cluster for caching & session management      | - **3 replicas** <br> - Uses **Redis Sentinel** for failover <br> - Configured via **ConfigMap** <br> - Supports **append-only mode** | Provides caching for **tinyurl-app** |
+| **tinyurl-redis-sentinel-service** (Service) | Network      | Manages Redis failover using Sentinel               | - Exposes Sentinel **port 26379** <br> - Monitors Redis health | Ensures high availability for **Redis** |
+| **tinyurl-prometheus** (Deployment) | Monitoring   | Collects metrics for observability                  | - Runs **Prometheus** <br> - Scrapes metrics from **tinyurl-app** <br> - Configured via **ConfigMap** | Monitors **tinyurl-app** |
+| **tinyurl-prometheus-service** (Service) | Network      | Exposes Prometheus for monitoring                   | - **Port 9090 → NodePort 30090** <br> - Allows access to Prometheus dashboard | External access to **Prometheus** |
+| **NetworkPolicy** (Security) | Security      | Restricts network access to secure services         | - **Allows Prometheus → tinyurl-app** <br> - **Allows tinyurl-app → Redis** <br> - Blocks other traffic | Controls access between **pods** |
+
+
+#### **🔗 Key Interactions:**
+1. **tinyurl-app** communicates with:
+   - **PostgreSQL primary & replica** via **JDBC (5432)**
+   - **Redis cluster** for caching
+   - **Prometheus** for metrics exposure
+2. **PostgreSQL primary** replicates data to **PostgreSQL replica**.
+3. **Redis Sentinel** monitors and ensures Redis **high availability**.
+4. **Horizontal Pod Autoscaler (HPA)** adjusts the number of app replicas dynamically.
+5. **Network Policies** secure internal communication by allowing specific pod-to-pod access.
+
 
 ## Features
 
