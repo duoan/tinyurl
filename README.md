@@ -8,9 +8,9 @@ This is a simple TinyURL service that allows users to generate short URLs from l
 ![](./images/high-level.png)
 Design advantages:
 
-1. **Scalability**: The architecture employs a distributed system design, allowing the service to handle a vast number of users and link redirects efficiently. This setup ensures that the system can scale horizontally by adding more instances as demand grows. citeturn0search3
+1. **Scalability**: The architecture employs a distributed system design, allowing the service to handle a vast number of users and link redirects efficiently. This setup ensures that the system can scale horizontally by adding more instances as demand grows. 
 2. **High Availability**: By incorporating multiple instances of critical components and using replication strategies for databases, the system ensures continuous availability. This redundancy minimizes downtime and maintains service reliability even during component failures.
-3. **Performance Optimization**: The use of in-memory caching mechanisms reduces latency, enabling faster access to frequently requested data. This approach enhances the user experience by providing quicker responses to URL redirection requests. citeturn0search2
+3. **Performance Optimization**: The use of in-memory caching mechanisms reduces latency, enabling faster access to frequently requested data. This approach enhances the user experience by providing quicker responses to URL redirection requests.
 4. **Efficient Resource Utilization**: Implementing Horizontal Pod Autoscalers (HPAs) allows the system to adjust resources dynamically based on traffic patterns. This ensures optimal performance during peak times and cost savings during low-traffic periods.
 5. **Security**: The architecture includes Network Policies to control traffic flow between pods, enhancing the security posture by restricting unauthorized access and isolating sensitive components.
 6. **Simplified Maintenance and Deployment**: Utilizing Kubernetes ConfigMaps and PersistentVolumeClaims decouples configuration and storage from application code. This separation simplifies updates, maintenance, and scaling operations, leading to more manageable deployments.
