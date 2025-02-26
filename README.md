@@ -1,12 +1,21 @@
 # TinyURL Service
 
-This is a simple TinyURL service that allows users to generate short URLs from long URLs. The service is implemented using **Spring Boot**, **Redis**, **PostgreSQL**, and **RedisBloom** to efficiently reduce the number of writes to the database.
+This is a simple TinyURL service that allows users to generate short URLs from long URLs. The service is implemented using **Spring Boot**, **Redis**, **PostgreSQL** to efficiently reduce the number of writes to the database.
 
 ## Architecture
 
 ### High Level Logical
 ![](./images/high-level.png)
+Design advantages:
 
+1. **Scalability**: The architecture employs a distributed system design, allowing the service to handle a vast number of users and link redirects efficiently. This setup ensures that the system can scale horizontally by adding more instances as demand grows. citeturn0search3
+2. **High Availability**: By incorporating multiple instances of critical components and using replication strategies for databases, the system ensures continuous availability. This redundancy minimizes downtime and maintains service reliability even during component failures.
+3. **Performance Optimization**: The use of in-memory caching mechanisms reduces latency, enabling faster access to frequently requested data. This approach enhances the user experience by providing quicker responses to URL redirection requests. citeturn0search2
+4. **Efficient Resource Utilization**: Implementing Horizontal Pod Autoscalers (HPAs) allows the system to adjust resources dynamically based on traffic patterns. This ensures optimal performance during peak times and cost savings during low-traffic periods.
+5. **Security**: The architecture includes Network Policies to control traffic flow between pods, enhancing the security posture by restricting unauthorized access and isolating sensitive components.
+6. **Simplified Maintenance and Deployment**: Utilizing Kubernetes ConfigMaps and PersistentVolumeClaims decouples configuration and storage from application code. This separation simplifies updates, maintenance, and scaling operations, leading to more manageable deployments.
+
+These design choices collectively contribute to a robust, efficient, and secure URL shortening service.
 
 ### Deployment (Kubernetes)
 ![](./kubernetes/architecture.png)
@@ -232,48 +241,117 @@ This endpoint checks if the application is healthy and can respond.
 
 ## How It Works
 
-1. **Short URL Generation**: When a user submits a long URL, the service generates a unique short URL by hashing the long URL and converting it into a shortened format. Before writing to the **PostgreSQL** database, the service checks the **RedisBloom** Bloom Filter to see if the short URL already exists. If it exists in the Bloom Filter, the service skips the write operation to the database.
-
-2. **URL Redirection**: When a user visits a short URL, the service checks **Redis** for a cached mapping. If found in the cache, the user is redirected immediately. If not in the cache, the service queries **PostgreSQL** for the long URL and caches it in Redis before redirecting.
-
-3. **PostgreSQL**: The long-to-short URL mapping is stored in a PostgreSQL database for persistence, ensuring the mappings are available even if Redis is cleared or restarted.
-
-4. **Redis (with RedisBloom)**: Redis is used as a cache for frequently accessed short URLs. Additionally, **RedisBloom**'s Bloom Filter is used to check whether a short URL already exists before performing a database write operation, reducing unnecessary database writes.
-
-## RedisBloom
-
-The **RedisBloom** module allows you to use **Bloom Filters** directly in Redis. A **Bloom Filter** is a space-efficient probabilistic data structure that can test whether an element is a member of a set. It is particularly useful in this case for checking whether a short URL has already been generated without querying the database. If the Bloom Filter indicates that the short URL already exists, the application skips the database insert, reducing the load on PostgreSQL.
-
-### RedisBloom Integration
-
-1. **Short URL Check**: The Bloom Filter is used to check if a short URL exists in Redis before attempting to store it in PostgreSQL. This reduces unnecessary writes and enhances performance.
-2. **Add to Bloom Filter**: After generating a new short URL and storing it in the database, the service adds the short URL to the Bloom Filter to mark it as "seen."
-
-### Example Code for RedisBloom Integration:
-
+1. **Short URL Generation**: When a user submits a long URL, the service generates a unique short URL by hashing the long URL and converting it into a shortened format. Before writing to the **PostgreSQL** database, the service checks cache and DB first. If the long_url already exists, the service skips the write operation to the database.
 ```java
-@Autowired
-private RedisTemplate<String, String> redisTemplate;
+String hashUrl(String url, int salt) {
+    if (url == null || url.isEmpty()) {
+        return null;
+    }
+    byte[] hashBytes = Hashing.goodFastHash(160).hashString(url + salt, StandardCharsets.UTF_8).asBytes();
+    byte[] shiftedBytes = new byte[Constants.REQUIRED_BYTE_COUNT];
+    System.arraycopy(hashBytes, 0, shiftedBytes, 0, Constants.REQUIRED_BYTE_COUNT);
+    // Encode to Base64
+    String base64Hash = Base64.getUrlEncoder().withoutPadding().encodeToString(shiftedBytes);
+    // Ensure it's exactly 9 characters
 
-public boolean isShortUrlExists(String shortUrl) {
-    return redisTemplate.opsForValue().get(shortUrl) != null;
-}
-
-public void addShortUrlToBloomFilter(String shortUrl) {
-    redisTemplate.opsForValue().set(shortUrl, "exists");
+    return base64Hash.substring(0, Constants.MAX_SHORT_URL_LENGTH);
 }
 ```
+   - **Collisions resolver**: After generate short url, the service check cache then DB, make sure the short-url not been used. If any conflicts, it will attempt with `salt+1` appending to the long-url.
+2. **URL Redirection**: When a user visits a short URL, the service checks **Redis** for a cached mapping. If found in the cache, the user is redirected immediately. If not in the cache, the service queries **PostgreSQL** for the long URL and caches it in Redis before redirecting.
 
-### Bloom Filter Operations
+3. **DataStore**: The long-to-short URL mapping is stored in a PostgreSQL database for persistence, ensuring the mappings are available even if Redis is cleared or restarted.
 
-- **Check for existence**: Before inserting the short URL into the database, check if it exists in the Bloom Filter.
-- **Insert into Bloom Filter**: After storing the short URL in PostgreSQL, add it to the Bloom Filter in Redis.
+4. **Cache**: Redis is used as a cache for frequently accessed short URLs.
+
+## Core Sequence Diagrams
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as TinyUrlService
+    participant CH as Cache
+    participant DB as Database
+    participant H as UrlHashUtil
+
+%% getLongUrl flow
+    rect rgb(200, 220, 240)
+        Note over C,H: getLongUrl Flow
+        C->>S: getLongUrl(shortUrl)
+        S->>CH: getLongUrl(shortUrl)
+
+        alt Cache Hit
+            CH-->>S: return longUrl
+            alt longUrl == NULL_LONG_URL
+                S-->>C: throw TinyUrlNotFoundException
+            else valid URL
+                S-->>C: return longUrl
+            end
+        else Cache Miss
+            CH-->>S: empty
+            S->>DB: findByShortUrl(shortUrl)
+
+            alt Found in DB
+                DB-->>S: UrlMapping
+                S->>CH: dualPutUrlMapping(shortUrl, longUrl)
+                CH-->>S: void
+                S-->>C: return longUrl
+            else Not Found
+                DB-->>S: empty
+                S->>CH: dualPutUrlMapping(shortUrl, NULL)
+                CH-->>S: void
+                S-->>C: throw TinyUrlNotFoundException
+            end
+        end
+    end
+
+%% createShortUrl flow
+    rect rgb(240, 220, 200)
+        Note over C,H: createShortUrl Flow
+        C->>S: createShortUrl(longUrl)
+        Note over S: Preprocess URL
+
+        S->>CH: getShortUrl(longUrl)
+
+        alt Cache Hit
+            CH-->>S: shortUrl
+            S-->>C: return shortUrl
+        else Cache Miss
+            CH-->>S: empty
+            S->>DB: findByLongUrl(longUrl)
+
+            alt Found in DB
+                DB-->>S: UrlMapping
+                S->>CH: dualPutUrlMapping(shortUrl, longUrl)
+                CH-->>S: void
+                S-->>C: return shortUrl
+            else Not Found
+                DB-->>S: empty
+
+                loop Until unique or limit reached
+                    S->>H: hashUrl(longUrl, attempt)
+                    H-->>S: shortUrl
+                    S->>CH: getLongUrl(shortUrl)
+                    CH-->>S: empty
+                    S->>DB: existsByShortUrl(shortUrl)
+                    DB-->>S: false
+                end
+
+                S->>DB: save(UrlMapping)
+                DB-->>S: void
+                S->>CH: dualPutUrlMapping(shortUrl, longUrl)
+                CH-->>S: void
+                S-->>C: return shortUrl
+            end
+        end
+    end
+
+```
 
 ## Database Schema
 
 The database schema is automatically created using Spring Data JPA, with the following table structure:
 
-### `url_mappings` Table
+### `t_url_mappings` Table
 
 | Column        | Type          | Description                                  |
 |---------------|---------------|----------------------------------------------|
@@ -308,16 +386,50 @@ You can run the tests using the following command:
 1. **Redis Not Connecting**: Ensure that Redis is running and the connection details are correct. You can check if Redis is running using the command `docker-compose ps` or by running `redis-cli ping`.
 2. **Database Issues**: Ensure that PostgreSQL is running and the database schema is correctly set up. You can manually create the database `tinyurl_db` if it doesn't exist, or ensure the service can create it automatically.
 
-## License
+---
 
-This project is licensed under the MIT License.
+## **Datastore Design Choice Comparison for TinyURL**
+
+| Datastore      | Type            | Cost Efficiency | Scalability | Read Performance | Write Performance | Consistency Model | Suitability for TinyURL |
+|---------------|----------------|----------------|-------------|------------------|------------------|-----------------|-------------------------|
+| **PostgreSQL**  | Relational (SQL) | ✅ **Low (Open Source)** | ➖ **Moderate (Read Replicas, Partitioning)** | ✅ **Good (Indexing, Caching)** | ➖ **Moderate (Row-based storage)** | ✅ **Strong (ACID)** | ✅ **Viable, but not optimized for key-value lookups** |
+| **MySQL**       | Relational (SQL) | ✅ **Low (Open Source)** | ➖ **Moderate (Sharding, Read Replicas)** | ✅ **Good** | ➖ **Moderate** | ✅ **Strong (ACID)** | ✅ **Similar to PostgreSQL** |
+| **MongoDB**     | NoSQL (Document) | ➖ **Moderate (Licensing Cost)** | ✅ **High (Sharding, Horizontal Scaling)** | ✅ **Good (Indexing)** | ✅ **Fast (Flexible Schema)** | ❌ **Eventual Consistency** | ❌ **Not optimized for key-value lookups** |
+| **DynamoDB**    | NoSQL (Key-Value) | ❌ **High (Pay-as-you-go)** | ✅ **Massive Scale** | ✅ **Very Fast** | ✅ **Very Fast** | ❌ **Eventual Consistency** | ✅ **Ideal for global scale, but costly** |
+| **Redis**       | NoSQL (In-memory) | ✅ **Low (Open Source, but RAM expensive)** | ✅ **High (Clustering)** | ✅ **Ultra-fast (RAM-based)** | ✅ **Ultra-fast (No Disk I/O)** | ❌ **No ACID guarantees** | ✅ **Best for caching & real-time lookups** |
 
 ---
 
-### **Summary of Changes:**
+### **What Does TinyURL Really Need?**
+✅ **Fast reads (URL resolution needs to be near-instantaneous)**  
+✅ **Efficient writes (storing new short links should be quick and scalable)**  
+✅ **Horizontal scaling support (to handle billions of URLs)**  
+✅ **Minimal cost (not over-engineered for a simple key-value use case)**
 
-- Added integration with **RedisBloom** to use Bloom Filters for checking the existence of short URLs before writing to PostgreSQL.
-- Updated the README to explain the use of **RedisBloom** and how it improves performance by reducing unnecessary database writes.
-- Provided an example of how to integrate RedisBloom in Spring Boot.
+---
 
-Let me know if you'd like to further refine this or if you have any additional questions!
+### **Why PostgreSQL Instead of NoSQL?**
+Even though **TinyURL is fundamentally a key-value store**, PostgreSQL was likely chosen because:
+
+1. **🔄 Read Replicas for Scaling** – PostgreSQL supports **read replicas** to scale **read-heavy workloads** (most TinyURL requests are read operations).
+2. **📊 Analytical Queries** – SQL enables easy **tracking & reporting** (e.g., number of redirects per URL, top-used links, etc.).
+3. **💰 Lower Operational Costs** – PostgreSQL **avoids licensing fees** and is **cheaper** to operate than DynamoDB for similar workloads.
+4. **🔗 Hybrid Data Needs** – TinyURL **might store metadata** (e.g., timestamps, user analytics) along with the URL, making a relational model useful.
+5. **🚀 Indexing Optimization** – PostgreSQL **B-tree indexes** make key-value lookups nearly as fast as a NoSQL store.
+
+---
+
+### **Would NoSQL (e.g., DynamoDB, Redis) Be Better?**
+- **Redis** is already **used for caching**, but **keeping everything in Redis would be too expensive** due to RAM costs.
+- **DynamoDB** is great for massive scale, but the **cost model (pay-per-request) makes it expensive** compared to an open-source DB.
+- **MongoDB** isn't optimized for pure key-value workloads—it's better for **document-based data**, which TinyURL **doesn’t need**.
+
+---
+
+### **Conclusion**
+While **NoSQL (DynamoDB, Redis) might be a better theoretical fit for pure key-value storage**, PostgreSQL **strikes the best balance** between **cost, flexibility, and scalability** while still handling TinyURL's needs efficiently. 🚀
+
+
+## License
+
+This project is licensed under the MIT License.
