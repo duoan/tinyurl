@@ -1,43 +1,140 @@
-apiVersion: apps/v1
-kind: Deployment
+---
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: tinyurl-redis
-  
-  labels:
-    app: tinyurl-redis
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: tinyurl-redis
-  template:
-    metadata:
-      name: tinyurl-redis
-      labels:
-        app: tinyurl-redis
-    spec:
-      containers:
-        - name: tinyurl-redis
-          image: redis:latest
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 6379
-              protocol: TCP
-          command: ["redis-server", "--appendonly", "yes"]
-      restartPolicy: Always
+  name: redis-config
+data:
+  redis.conf: |
+    appendonly yes
+    protected-mode no
+  replica.conf: |
+    replicaof redis-0.redis.default.svc.cluster.local 6379
+    appendonly yes
+    protected-mode no
+  sentinel.conf: |
+    port 26379
+    dir /tmp
+    sentinel deny-scripts-reconfig yes
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+    # Using FQDN
+    sentinel monitor mymaster redis-0.redis.default.svc.cluster.local 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel failover-timeout mymaster 60000
+    sentinel parallel-syncs mymaster 1
+
 
 ---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  serviceName: redis
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      initContainers:
+        - name: init-redis
+          image: redis:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -ex
+              # Copy the appropriate Redis config
+              if [ ${HOSTNAME} == "redis-0" ]; then
+                cp /mnt/redis-config/redis.conf /mnt/conf/redis.conf
+              else
+                cp /mnt/redis-config/replica.conf /mnt/conf/redis.conf
+              fi
+              # Copy and modify sentinel config
+              cp /mnt/redis-config/sentinel.conf /mnt/conf/sentinel.conf
+
+          volumeMounts:
+            - name: redis-config
+              mountPath: /mnt/redis-config
+            - name: conf
+              mountPath: /mnt/conf
+      containers:
+        - name: redis
+          image: redis:latest
+          ports:
+            - containerPort: 6379
+              name: redis
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: conf
+              mountPath: /etc/redis
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        - name: sentinel
+          image: redis:latest
+          command: ["redis-sentinel", "/etc/redis/sentinel.conf"]
+          ports:
+            - containerPort: 26379
+              name: sentinel
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/redis
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli -p 26379 ping
+            initialDelaySeconds: 15
+            periodSeconds: 5
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-config
+        - name: conf
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+# Headless service for StatefulSet pods (required for pod DNS names)
 apiVersion: v1
 kind: Service
 metadata:
-  name: tinyurl-redis-service
-  
+  name: redis  # This should match the StatefulSet's serviceName
 spec:
   selector:
-    app: tinyurl-redis
+    app: redis
   ports:
-    - protocol: TCP
-      port: 6379
-      targetPort: 6379
+    - port: 6379
+      name: redis
+  clusterIP: None  # Headless service for StatefulSet DNS
 
-
+---
+# Sentinel service  Spring Boot to connect
+apiVersion: v1
+kind: Service
+metadata:
+  name: tinyurl-redis-sentinel-service
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 26379
+      targetPort: 26379
+      name: sentinel

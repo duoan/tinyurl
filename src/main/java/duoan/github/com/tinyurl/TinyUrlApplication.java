@@ -18,7 +18,10 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisSentinelConfiguration;
+import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
+import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 
@@ -33,24 +36,24 @@ public class TinyUrlApplication {
         SpringApplication.run(TinyUrlApplication.class, args);
     }
 
-
     @Bean
-    JedisConnectionFactory jedisConnectionFactory() {
-        return new JedisConnectionFactory();
-    }
-
-    @Bean
-    RedissonClient redissonClient(RedisProperties props) {
-        Config config = new Config();
-        String address = String.format("redis://%s:%s", props.getHost(), props.getPort());
-        log.info("Configuring Redis with address: {}", address);
-        config.useSingleServer()
-                .setAddress(address)
-                .setConnectTimeout(10000)
-                .setRetryAttempts(3)
-                .setRetryInterval(1500);
-
-        return Redisson.create(config);
+    JedisConnectionFactory jedisConnectionFactory(RedisProperties redisProperties) {
+        if (redisProperties.getSentinel() != null) {
+            RedisSentinelConfiguration sentinelConfig = new RedisSentinelConfiguration()
+                    .master(redisProperties.getSentinel().getMaster());
+            // Add sentinel nodes
+            for (String node : redisProperties.getSentinel().getNodes()) {
+                String[] parts = node.split(":");
+                sentinelConfig.sentinel(parts[0], Integer.parseInt(parts[1]));
+            }
+            // Configure password if set
+            if (StringUtils.hasText(redisProperties.getPassword())) {
+                sentinelConfig.setPassword(redisProperties.getPassword());
+            }
+            return new JedisConnectionFactory(sentinelConfig);
+        } else {
+            return new JedisConnectionFactory();
+        }
     }
 
     @Bean("l2CacheManager")

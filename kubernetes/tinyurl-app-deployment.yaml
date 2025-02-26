@@ -20,9 +20,28 @@ spec:
         - name: tinyurl-app
           image: docker.io/victorduoan/tinyurl:0.0.1-SNAPSHOT
           imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "200m"    # 0.2 CPU cores
+              memory: "512Mi"
+            limits:
+              cpu: "500m"    # 0.5 CPU cores
+              memory: "1Gi"
           ports:
             - containerPort: 8080
               protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
           env:
             # Spring profile
             - name: SPRING_PROFILES_ACTIVE
@@ -41,11 +60,11 @@ spec:
               value: "myuser"
             - name: SPRING_DATASOURCE_REPLICA_PASSWORD
               value: "secret"
-            # Redis configuration remains the same
-            - name: SPRING_REDIS_HOST
-              value: "tinyurl-redis-service"
-            - name: SPRING_REDIS_PORT
-              value: "6379"
+            # Redis Sentinel configuration
+            - name: SPRING_REDIS_SENTINEL_MASTER
+              value: "mymaster"
+            - name: SPRING_REDIS_SENTINEL_NODES
+              value: "tinyurl-redis-sentinel-service:26379"
             # Additional JPA configurations
             - name: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
               value: "org.hibernate.dialect.PostgreSQLDialect"
@@ -67,3 +86,35 @@ spec:
       port: 8080
       targetPort: 8080
       nodePort: 30080
+
+---
+# HPA configuration
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tinyurl-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tinyurl-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300

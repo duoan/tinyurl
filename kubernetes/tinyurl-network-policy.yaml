@@ -24,12 +24,16 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: tinyurl-redis
+      app: redis
   ingress:
     - from:
         - podSelector:
             matchLabels:
               app: tinyurl-app
       ports:
+        # primary
         - protocol: TCP
           port: 6379
+        # sentinel
+        - protocol: TCP
+          port: 26379

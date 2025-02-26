@@ -26,7 +26,11 @@ check_status() {
 # Function to deploy resources
 deploy() {
     print_message "${YELLOW}" "Starting deployment process..."
-    
+
+    print_message "${YELLOW}" "Remove existing app docker image..."
+    (docker image rm victorduoan/tinyurl:0.0.1-SNAPSHOT || check_status "No app docker image")
+    check_status "Docker image removed"
+
     # Build Docker image
     print_message "${YELLOW}" "Building Docker image..."
     ./gradlew bootBuildImage
